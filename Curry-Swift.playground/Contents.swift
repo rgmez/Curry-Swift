@@ -37,9 +37,10 @@ struct Artist {
     }
     
     func printArtist() {
-        print("Name:\(name), Gender:\(gender)")
-        print("Albums:")
+        print("\(name), Gender:\(gender)")
+        print("Best Albums:")
         albums?.forEach{ $0.printAlbum() }
+        print("\n")
     }
 }
 
@@ -63,7 +64,7 @@ struct Album {
     }
     
     func printAlbum() {
-        print("   \(name), \(gender), \(copyright)")
+        print("   - \(name), \(gender), \(copyright)")
     }
 }
 
