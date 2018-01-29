@@ -10,14 +10,33 @@ enum Genders: String {
     case pop = "Pop"
 }
 
-enum Singers: String {
-    case elvis_presley = "197443"
-    case bruce_springsteen = "178834"
-    case bob_dylan = "462006"
-    case frank_sinatra = "171366"
-    case beyonce = "1419227"
-    case freddie_mercury = "3915743"
-    case michael_jackson = "32940"
+enum Singers: Int {
+    case elvis_presley = 197443
+    case bruce_springsteen = 178834
+    case bob_dylan = 462006
+    case frank_sinatra = 171366
+    case beyonce = 1419227
+    case freddie_mercury = 3915743
+    case michael_jackson = 32940
+    
+    func singerName() -> String {
+        switch self {
+        case .elvis_presley:
+            return "Elvis Presley"
+        case .bruce_springsteen:
+            return "Bruce Springsteen"
+        case .bob_dylan:
+            return "Bob Dylan"
+        case .frank_sinatra:
+            return "Frank Sinatra"
+        case .beyonce:
+            return "Beyonce"
+        case .freddie_mercury:
+            return "Freddie Mercury"
+        case .michael_jackson:
+            return "Michael Jackson"
+        }
+    }
 }
 
 struct Artist {
@@ -68,14 +87,15 @@ struct Album {
     }
 }
 
+// We can fix Artist's and Album's gender data to create generic rock/pop artists and albums
 let createRockArtist = Artist.create(gender: Genders.rock.rawValue)
 let createPopArtist = Artist.create(gender: Genders.pop.rawValue)
 let createRockAlbum = Album.create(gender: Genders.rock.rawValue)
 let createPopAlbum = Album.create(gender: Genders.pop.rawValue)
 
-func fetchBestAlbumsOf(artist: String, completion: @escaping (_ artist: Artist) -> Void) {
+func fetchBestAlbumsOf(artist: Int, completion: @escaping (_ artist: Artist) -> Void) {
    
-    if let url = URL(string: "https://itunes.apple.com/lookup?id=" + artist + "&entity=album&limit=5") {
+    if let url = URL(string: "https://itunes.apple.com/lookup?id=" + String(artist) + "&entity=album&limit=5") {
         
         let urlRequest = URLRequest(url: url)
         
@@ -130,8 +150,45 @@ func getAlbums(albumsArray: [[String: AnyObject]]) -> [Album]? {
 
 fetchBestAlbumsOf(artist: Singers.bruce_springsteen.rawValue) { $0.printArtist() }
 fetchBestAlbumsOf(artist: Singers.bob_dylan.rawValue) { $0.printArtist() }
-fetchBestAlbumsOf(artist: Singers.beyonce.rawValue) { $0.printArtist() }
-fetchBestAlbumsOf(artist: Singers.elvis_presley.rawValue) { $0.printArtist() }
-fetchBestAlbumsOf(artist: Singers.frank_sinatra.rawValue) { $0.printArtist() }
-fetchBestAlbumsOf(artist: Singers.freddie_mercury.rawValue) { $0.printArtist() }
-fetchBestAlbumsOf(artist: Singers.michael_jackson.rawValue) { $0.printArtist() }
+//fetchBestAlbumsOf(artist: Singers.beyonce.rawValue) { $0.printArtist() }
+//fetchBestAlbumsOf(artist: Singers.elvis_presley.rawValue) { $0.printArtist() }
+//fetchBestAlbumsOf(artist: Singers.frank_sinatra.rawValue) { $0.printArtist() }
+//fetchBestAlbumsOf(artist: Singers.freddie_mercury.rawValue) { $0.printArtist() }
+//fetchBestAlbumsOf(artist: Singers.michael_jackson.rawValue) { $0.printArtist() }
+
+
+// We can fix the Springsteen's data we already know (name, id) and use createRockArtist because Bruce Springsteen is a Rock Singer
+let createSpringsteen = createRockArtist(Singers.bruce_springsteen.singerName())
+let createSpringsteenArtist = createSpringsteen(Singers.bruce_springsteen.rawValue)
+
+func fetchBruceSpringsteenAllAlbums(completion: @escaping (_ artist: Artist) -> Void) {
+    
+    if let url = URL(string: "https://itunes.apple.com/lookup?id=" + String(Singers.bruce_springsteen.rawValue) + "&entity=album") {
+        
+        let urlRequest = URLRequest(url: url)
+        
+        let task = URLSession.shared.dataTask(with: urlRequest, completionHandler: { data, response, error in
+            do {
+                
+                if let error = error {
+                    throw error
+                }
+                
+                if let data = data,
+                    let jsonDictionary = try JSONSerialization.jsonObject(with: data, options: []) as? [String: Any],
+                    let results = jsonDictionary["results"] as? [[String: Any]] {
+                    
+                    let albums = getAlbums(albumsArray: results.filter{ $0["collectionType"] as? String == "Album" } as [[String : AnyObject]])
+                    
+                    // Add Albums to Sinatra's data.
+                    completion(createSpringsteenArtist(albums))
+                }
+            } catch let error {
+                print(error)
+            }
+        })
+        task.resume()
+    }
+}
+
+//fetchBruceSpringsteenAllAlbums { $0.printArtist() }
