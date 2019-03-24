@@ -1,9 +1,43 @@
-//: Playground - noun: a place where people can play
 
 import UIKit
 import PlaygroundSupport
 
 PlaygroundPage.current.needsIndefiniteExecution = true
+
+// FIRST EXAMPLE - We want to set image in UIImageView from URL:
+
+var imageView = UIImageView(frame: CGRect(x: 0, y: 0, width: 300, height: 200))
+
+func getImageFrom(_ url: URL) {
+    guard let data = try? Data(contentsOf: url) else {
+        return
+    }
+    imageView.image = UIImage(data: data)
+}
+
+func getCurryingImageFrom(_ url: URL) -> () -> () {
+    return {
+        guard let data = try? Data(contentsOf: url) else {
+            return
+        }
+        imageView.image = UIImage(data: data)
+    }
+}
+
+func downloadImageFrom(urlString: String) {
+    
+    guard let url = URL(string: urlString) else { return }
+    
+    let op = Operation()
+    
+    op.completionBlock = getCurryingImageFrom(url)
+    
+    op.start()
+}
+
+downloadImageFrom(urlString: "http://gomotors.net/pics/Suzuki/suzuki-swift-xg-01.jpg")
+
+//SECOND EXAMPLE: We want to retrieve top 5 albums of some singers.
 
 enum Genders: String {
     case rock = "Rock"
@@ -56,7 +90,7 @@ struct Artist {
     }
     
     func printArtist() {
-        print("\(name), Gender:\(gender)")
+        print("\(String(describing: name)), Gender:\(String(describing: gender))")
         print("Best Albums:")
         albums?.forEach{ $0.printAlbum() }
         print("\n")
@@ -68,9 +102,9 @@ struct Album {
     let name: String
     let copyright: String
     let gender: String
-    let image: String
+    let image: String?
     
-    static func create(gender: String) -> (Int) -> (String) -> (String) -> (String) -> Album {
+    static func create(gender: String) -> (Int) -> (String) -> (String) -> (String?) -> Album {
         return { id in
             return { name in
                 return { copyright in
@@ -83,11 +117,11 @@ struct Album {
     }
     
     func printAlbum() {
-        print("   - \(name), \(gender), \(copyright)")
+        print("   - \(String(describing: name)), \(String(describing: gender)), \(String(describing: copyright))")
     }
 }
 
-// We can fix Artist's and Album's gender data to create generic rock/pop artists and albums
+// We can save Artist's and Album's gender data to create generic rock/pop artists and albums
 let createRockArtist = Artist.create(gender: Genders.rock.rawValue)
 let createPopArtist = Artist.create(gender: Genders.pop.rawValue)
 let createRockAlbum = Album.create(gender: Genders.rock.rawValue)
@@ -96,51 +130,43 @@ let createPopAlbum = Album.create(gender: Genders.pop.rawValue)
 func fetchBestAlbumsOf(artist: Int, completion: @escaping (_ artist: Artist) -> Void) {
    
     if let url = URL(string: "https://itunes.apple.com/lookup?id=" + String(artist) + "&entity=album&limit=5") {
+    
+        URLSession.shared.dataTask(with: URLRequest(url: url)) { data, response, error in
         
-        let urlRequest = URLRequest(url: url)
-        
-        let task = URLSession.shared.dataTask(with: urlRequest, completionHandler: { data, response, error in
-            do {
-                
-                if let error = error {
-                    throw error
-                }
-                
-                if let data = data,
-                    let jsonDictionary = try JSONSerialization.jsonObject(with: data, options: []) as? [String: Any],
-                    let results = jsonDictionary["results"] as? [[String: Any]] {
-                    
-                    let artistDict = results.filter { $0["artistType"] as? String == "Artist" }.first
-                    
-                    guard let artistDictionary = artistDict,
-                          let itemType = artistDictionary["artistType"] as? String, itemType == "Artist",
-                          let id = artistDictionary["artistId"] as? Int,
-                          let name = artistDictionary["artistName"] as? String,
-                          let gender = artistDictionary["primaryGenreName"] as? String else {
-                            return
+            guard let data = data,
+                let resultModel = try? JSONDecoder().decode(ResultModel.self, from: data),
+                let first = resultModel.results.first,
+                let itemType = first.artistType,
+                itemType == "Artist",
+                let id = first.artistID,
+                let name = first.artistName,
+                let gender = first.primaryGenreName else {
+                    if let error = error {
+                        print(error)
                     }
-                    
-                    let artist = gender == Genders.rock.rawValue ? createRockArtist(name)(id) : createPopArtist(name)(id)
-                    let albums = getAlbums(albumsArray: results.filter{ $0["collectionType"] as? String == "Album" } as [[String : AnyObject]])
-                    
-                    completion(artist(albums))
-                }
-            } catch let error {
-                print(error)
+                    return
             }
-        })
-        task.resume()
+            
+            let artist =
+                gender == Genders.rock.rawValue ?
+                    createRockArtist(name)(id) : createPopArtist(name)(id)
+            let albums =
+                getAlbums(albumsArray:
+                    resultModel.results.filter { $0.collectionType == "Album" })
+            
+            completion(artist(albums))
+        }.resume()
     }
 }
 
-func getAlbums(albumsArray: [[String: AnyObject]]) -> [Album]? {
-    return albumsArray.flatMap {
+func getAlbums(albumsArray: [ArtistData]) -> [Album]? {
+    return albumsArray.compactMap {
         
-        guard let id = $0["collectionId"] as? Int,
-            let name = $0["collectionName"] as? String,
-            let copyright = $0["copyright"] as? String,
-            let gender = $0["primaryGenreName"] as? String,
-            let image = $0["artworkUrl100"] as? String else {
+        guard let id = $0.collectionID,
+            let name = $0.collectionName,
+            let copyright = $0.copyright,
+            let gender = $0.primaryGenreName,
+            let image = $0.artworkUrl100 else {
                 return nil
         }
         
@@ -150,45 +176,40 @@ func getAlbums(albumsArray: [[String: AnyObject]]) -> [Album]? {
 
 fetchBestAlbumsOf(artist: Singers.bruce_springsteen.rawValue) { $0.printArtist() }
 fetchBestAlbumsOf(artist: Singers.bob_dylan.rawValue) { $0.printArtist() }
-//fetchBestAlbumsOf(artist: Singers.beyonce.rawValue) { $0.printArtist() }
-//fetchBestAlbumsOf(artist: Singers.elvis_presley.rawValue) { $0.printArtist() }
-//fetchBestAlbumsOf(artist: Singers.frank_sinatra.rawValue) { $0.printArtist() }
-//fetchBestAlbumsOf(artist: Singers.freddie_mercury.rawValue) { $0.printArtist() }
-//fetchBestAlbumsOf(artist: Singers.michael_jackson.rawValue) { $0.printArtist() }
+fetchBestAlbumsOf(artist: Singers.beyonce.rawValue) { $0.printArtist() }
+fetchBestAlbumsOf(artist: Singers.elvis_presley.rawValue) { $0.printArtist() }
+fetchBestAlbumsOf(artist: Singers.frank_sinatra.rawValue) { $0.printArtist() }
+fetchBestAlbumsOf(artist: Singers.freddie_mercury.rawValue) { $0.printArtist() }
+fetchBestAlbumsOf(artist: Singers.michael_jackson.rawValue) { $0.printArtist() }
 
-
-// We can fix the Springsteen's data we already know (name, id) and use createRockArtist because Bruce Springsteen is a Rock Singer
+// We can save the Springsteen's data we already know (name, id) and use createRockArtist because Bruce Springsteen is a Rock Singer
 let createSpringsteen = createRockArtist(Singers.bruce_springsteen.singerName())
 let createSpringsteenArtist = createSpringsteen(Singers.bruce_springsteen.rawValue)
 
 func fetchBruceSpringsteenAllAlbums(completion: @escaping (_ artist: Artist) -> Void) {
     
     if let url = URL(string: "https://itunes.apple.com/lookup?id=" + String(Singers.bruce_springsteen.rawValue) + "&entity=album") {
-        
-        let urlRequest = URLRequest(url: url)
-        
-        let task = URLSession.shared.dataTask(with: urlRequest, completionHandler: { data, response, error in
-            do {
-                
-                if let error = error {
-                    throw error
-                }
-                
-                if let data = data,
-                    let jsonDictionary = try JSONSerialization.jsonObject(with: data, options: []) as? [String: Any],
-                    let results = jsonDictionary["results"] as? [[String: Any]] {
+
+        URLSession.shared.dataTask(with: URLRequest(url: url)) { data, response, error in
+            
+            guard let data = data,
+                let resultModel = try? JSONDecoder().decode(ResultModel.self, from: data) else {
                     
-                    let albums = getAlbums(albumsArray: results.filter{ $0["collectionType"] as? String == "Album" } as [[String : AnyObject]])
-                    
-                    // Add Albums to Sinatra's data.
-                    completion(createSpringsteenArtist(albums))
-                }
-            } catch let error {
-                print(error)
+                    if let error = error {
+                        print(error)
+                    }
+                    return
             }
-        })
-        task.resume()
+            
+            let albums = getAlbums(albumsArray: resultModel.results.filter{ $0.collectionType == "Album" })
+            
+            // Add Albums to Springsteen's data.
+            completion(createSpringsteenArtist(albums))
+            
+        }.resume()
     }
 }
 
-//fetchBruceSpringsteenAllAlbums { $0.printArtist() }
+fetchBruceSpringsteenAllAlbums { artist in
+    print(artist)
+}
